@@ -1,0 +1,9 @@
+{
+	"python.linting.enabled": true,
+	"editor.formatOnSave": true,
+	"[python]": {
+		// "ms-python.black-formatter" vscodeの拡張側でフォーマット処理が完結するため、追加でpip installは不要
+		"editor.defaultFormatter": "ms-python.black-formatter"
+	},
+	"python.formatting.provider": "none"
+}

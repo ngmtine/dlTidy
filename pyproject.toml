@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "dltidy"
+version = "0.1.0"
+description = ""
+authors = ["ngmtine <ngmfries@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+yt-dlp = "^2023.2.17"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
