@@ -10,7 +10,7 @@ SETTING_FILE = "settings.ini"
 INFOMATION_FILE = "info.ini"
 
 
-def check_executable():
+def check_executable() -> bool:
     """
     必要なコマンドが実行可能か確認
     """
@@ -58,7 +58,7 @@ def get_all_dirs(path: str) -> list[str]:
     return dir_list
 
 
-def ydlwrapper_extract_info(url: str) -> list[dict]:
+def call_ydl_extract_info(url: str) -> list[dict]:
     """
     Use youtube-dl to fetch information from url
     """
@@ -74,6 +74,29 @@ def ydlwrapper_extract_info(url: str) -> list[dict]:
         return result["entries"]
     else:
         return []
+
+
+async def call_ydl_download_m4a(id: str) -> bool:
+    """
+    Use youtube-dl to download m4a
+    """
+    opts = {
+        # "simulate": True,
+        "ignoreerrors": True,
+        "quiet": True,
+        "outtmpl": "%(title)s.%(ext)s",
+        "format": "bestaudio[ext=m4a]",
+        "download_archive": "downloaded.txt",
+        "writethumbnail": True,
+        "postprocessors": [
+            {"key": "FFmpegMetadata"},  # postprocessors must be written in this order #30101
+            {"key": "EmbedThumbnail"},
+        ],
+    }
+    with YoutubeDL(opts) as ydl:
+        print(f"DL start! {id}")
+        ydl.download([id])
+    return
 
 
 class EntriesSingleton:
@@ -95,6 +118,18 @@ class EntriesSingleton:
 
         return cls._instance
 
+    async def start_download(self, entry):
+        os.chdir(entry["download_dir"])
+        await call_ydl_download_m4a(entry["id"])
+
+    tasks = []
+
+    async def async_wrapper_start_download(self):
+        for entry in self.entries_list:
+            task = asyncio.create_task(self.start_download(entry))
+            self.tasks.append(task)
+        await asyncio.gather(*self.tasks)
+
 
 class DirExecutor:
     def __init__(self, path):
@@ -104,7 +139,7 @@ class DirExecutor:
         try:
             self.dir_config = await self.read_dir_config()
             self.entries_list = await self.fetch_entries()
-            entries_singleton = EntriesSingleton(self.entries_list)
+            EntriesSingleton(self.entries_list)
         except Exception as e:
             pass
 
@@ -145,7 +180,7 @@ class DirExecutor:
         """
         dir_entries = []
         for url in self.dir_config["url_list"]:
-            url_entries = ydlwrapper_extract_info(url)
+            url_entries = call_ydl_extract_info(url)
             dir_entries.extend(url_entries)
 
         # download_dir追加
@@ -178,7 +213,7 @@ async def main():
         await asyncio.gather(*tasks)
 
         entries_singleton = EntriesSingleton()
-        print(entries_singleton.entries_list)
+        await entries_singleton.async_wrapper_start_download()
 
     except Exception as e:
         print(e)
@@ -186,5 +221,13 @@ async def main():
 
 
 if __name__ == "__main__":
+    import time
+
+    start_time = time.perf_counter()
+
     asyncio.run(main())
     print("end!")
+
+    end_time = time.perf_counter()
+    elapsed_time = end_time - start_time
+    print(f"elapsed time: {elapsed_time:.3f} seconds")
