@@ -4,6 +4,7 @@ import asyncio
 import sys
 import configparser
 
+from yt_dlp import YoutubeDL
 
 SETTING_FILE = "settings.ini"
 INFOMATION_FILE = "info.ini"
@@ -36,7 +37,7 @@ def read_settings(setting_file: str = SETTING_FILE) -> bool:
     return settings
 
 
-def get_all_dirs(path):
+def get_all_dirs(path: str) -> list[str]:
     """
     path（output_dir）以下のディレクトリを列挙
     """
@@ -57,28 +58,103 @@ def get_all_dirs(path):
     return dir_list
 
 
-async def read_dir_info(path):
-    # cd
-    os.chdir(path)
+def ydlwrapper_extract_info(url: str) -> list[dict]:
+    """
+    Use youtube-dl to fetch information from url
+    """
+    opts = {
+        "simulate": True,
+        "ignoreerrors": True,
+        "quiet": True,
+        "extract_flat": True,
+    }
+    with YoutubeDL(opts) as ydl:
+        result = ydl.extract_info(url)
+    if result != None:
+        return result["entries"]
+    else:
+        return []
 
-    # ディレクトリ内のinfo.iniの読み込み
-    info = {}
-    ini = configparser.ConfigParser()
-    ini.read(INFOMATION_FILE, encoding="utf-8_sig")
-    info["artist"] = ini["env"]["artist"]
-    info["album"] = ini["env"]["album"]
-    info["url_list"] = (
-        ini["env"]["url_list"]
-        .replace("\n", "")
-        .replace(" ", "")
-        .replace("　", "")
-        .split(",")
-    )
 
-    if len(info["url_list"]) == 0:
-        raise Exception("urlの指定がありません")
+class EntriesSingleton:
+    _instance = None
 
-    return info
+    def __init__(self, entries_list):
+        self.entries_list.extend(entries_list)
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            # 初回呼び出し
+            cls.entries_list = []
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+
+class DirExecutor:
+    def __init__(self, path):
+        try:
+            self.path = path
+            self.loop = asyncio.get_event_loop()
+            self.loop.create_task(self.async_init())
+        except Exception as e:
+            # print(e)
+            pass
+
+    async def async_init(self):
+        try:
+            self.dir_config = await self.read_dir_config()
+            self.entries_list = await self.fetch_entries()
+            # ここでDlExecutor的なシングルトンクラスにentriesを投げる
+            entries_singleton = await EntriesSingleton(self.entries_list)
+            # print(entries_singleton)
+        except Exception as e:
+            # print(e)
+            pass
+
+    def read_dir_config(self) -> dict:  # dict{"artist": str, "album": str, "ulr_list": list[str]}
+        """
+        self.pathに移動し、設定ファイル（info.ini）を読み取り、辞書型configを返す
+        """
+        # cd
+        os.chdir(self.path)
+
+        # 対象ディレクトリに設定ファイルが存在しない場合、なにもしない
+        if not os.path.isfile(INFOMATION_FILE):
+            raise FileNotFoundError()
+
+        # ディレクトリ内のinfo.iniの読み込み
+        config = {}
+        ini = configparser.ConfigParser()
+        ini.read(INFOMATION_FILE, encoding="utf-8_sig")
+        config["artist"] = ini["env"]["artist"]
+        config["album"] = ini["env"]["album"]
+        config["url_list"] = ini["env"]["url_list"].replace("\n", "").replace(" ", "").replace("　", "").split(",")
+
+        # 値が存在しない場合
+        if len(config["url_list"]) == 0:
+            # raise Exception("urlの指定がありません")
+            config["url"] = "unknown"
+        if len(config["artist"]) == 0:
+            config["artist"] = "unknown"
+        if len(config["album"]) == 0:
+            config["album"] = "unknown"
+
+        return config
+
+    def fetch_entries(self) -> list:  # list[dict{"download_dir": str, "url": str, "title": str, ...}]
+        """
+        与えられたurl（youtubeのプレイリストurl等を想定）をyt-dlpに投げ、動画データのリストを取得する
+        動画データにはyt-dlpで得られた情報に加え、download_dirも追加する
+        """
+        dir_entries = []
+        for url in self.dir_config["url_list"]:
+            url_entries = ydlwrapper_extract_info(url)
+            dir_entries.extend(url_entries)
+
+        # download_dir追加
+        dir_entries = [{**d, "download_dir": self.path} for d in dir_entries]
+
+        return dir_entries
 
 
 async def main():
@@ -88,14 +164,21 @@ async def main():
         check_executable()
         settings = read_settings()
         dir_list = get_all_dirs(settings["output_dir"])
-        print(dir_list)
-        for dir in dir_list:
-            print(dir)
-            await read_dir_info(dir)
+
+        # for dir in dir_list:
+        #     # await read_dir_config(dir)
+        #     DirExecutor(dir)
+
+        tasks = [asyncio.create_task(DirExecutor(_dir)) for _dir in dir_list]
+        await asyncio.gather(*tasks)
+
+        a = EntriesSingleton()
+        print(a)
 
     except Exception as e:
-        print(e)
-        sys.exit()
+        # print(e)
+        # sys.exit()
+        pass
 
 
 if __name__ == "__main__":
