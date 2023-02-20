@@ -77,39 +77,35 @@ def ydlwrapper_extract_info(url: str) -> list[dict]:
 
 
 class EntriesSingleton:
+    """
+    対象となる全てのentriesを集約するためのシングルトンクラス
+    """
+
     _instance = None
 
-    def __init__(self, entries_list):
+    def __init__(self, entries_list=[]):
         self.entries_list.extend(entries_list)
 
     def __new__(cls, *args, **kwargs):
+
         if not cls._instance:
             # 初回呼び出し
             cls.entries_list = []
             cls._instance = super().__new__(cls)
+
         return cls._instance
 
 
 class DirExecutor:
     def __init__(self, path):
-        try:
-            self.path = path
-            # self.loop = asyncio.get_event_loop()
-            # self.loop.create_task(self.async_init())
-            # print(self.path)
-        except Exception as e:
-            # print(e)
-            pass
+        self.path = path
 
     async def async_init(self):
         try:
             self.dir_config = await self.read_dir_config()
             self.entries_list = await self.fetch_entries()
-            # ここでDlExecutor的なシングルトンクラスにentriesを投げる
-            # entries_singleton = EntriesSingleton(self.entries_list)
-            # print(entries_singleton)
+            entries_singleton = EntriesSingleton(self.entries_list)
         except Exception as e:
-            # print(e)
             pass
 
     async def read_dir_config(self) -> dict:  # dict{"artist": str, "album": str, "ulr_list": list[str]}
@@ -181,16 +177,14 @@ async def main():
         # コルーチンを並行実行
         await asyncio.gather(*tasks)
 
-        a = EntriesSingleton()
-        print(a)
+        entries_singleton = EntriesSingleton()
+        print(entries_singleton.entries_list)
 
     except Exception as e:
         print(e)
-        # sys.exit()
         pass
 
 
 if __name__ == "__main__":
-    # main()
     asyncio.run(main())
     print("end!")
