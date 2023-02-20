@@ -94,8 +94,9 @@ class DirExecutor:
     def __init__(self, path):
         try:
             self.path = path
-            self.loop = asyncio.get_event_loop()
-            self.loop.create_task(self.async_init())
+            # self.loop = asyncio.get_event_loop()
+            # self.loop.create_task(self.async_init())
+            # print(self.path)
         except Exception as e:
             # print(e)
             pass
@@ -105,13 +106,13 @@ class DirExecutor:
             self.dir_config = await self.read_dir_config()
             self.entries_list = await self.fetch_entries()
             # ここでDlExecutor的なシングルトンクラスにentriesを投げる
-            entries_singleton = await EntriesSingleton(self.entries_list)
+            # entries_singleton = EntriesSingleton(self.entries_list)
             # print(entries_singleton)
         except Exception as e:
             # print(e)
             pass
 
-    def read_dir_config(self) -> dict:  # dict{"artist": str, "album": str, "ulr_list": list[str]}
+    async def read_dir_config(self) -> dict:  # dict{"artist": str, "album": str, "ulr_list": list[str]}
         """
         self.pathに移動し、設定ファイル（info.ini）を読み取り、辞書型configを返す
         """
@@ -141,7 +142,7 @@ class DirExecutor:
 
         return config
 
-    def fetch_entries(self) -> list:  # list[dict{"download_dir": str, "url": str, "title": str, ...}]
+    async def fetch_entries(self) -> list:  # list[dict{"download_dir": str, "url": str, "title": str, ...}]
         """
         与えられたurl（youtubeのプレイリストurl等を想定）をyt-dlpに投げ、動画データのリストを取得する
         動画データにはyt-dlpで得られた情報に加え、download_dirも追加する
@@ -161,22 +162,30 @@ async def main():
     print("start!")
 
     try:
+        # このスクリプトが依存するプログラムの存在チェック
         check_executable()
+
+        # グローバルな設定の読み込み
         settings = read_settings()
+
+        # output_dir以下のディレクトリを列挙
         dir_list = get_all_dirs(settings["output_dir"])
 
-        # for dir in dir_list:
-        #     # await read_dir_config(dir)
-        #     DirExecutor(dir)
+        # コルーチンのリスト作成
+        tasks = []
+        for _dir in dir_list:
+            dir_executor = DirExecutor(_dir)
+            task = asyncio.create_task(dir_executor.async_init())
+            tasks.append(task)
 
-        tasks = [asyncio.create_task(DirExecutor(_dir)) for _dir in dir_list]
+        # コルーチンを並行実行
         await asyncio.gather(*tasks)
 
         a = EntriesSingleton()
         print(a)
 
     except Exception as e:
-        # print(e)
+        print(e)
         # sys.exit()
         pass
 
