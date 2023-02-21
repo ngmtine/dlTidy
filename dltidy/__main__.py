@@ -3,11 +3,14 @@ import os
 import asyncio
 import sys
 import configparser
+from concurrent.futures import ThreadPoolExecutor
+import tqdm
 
 from yt_dlp import YoutubeDL
 
 SETTING_FILE = "settings.ini"
 INFOMATION_FILE = "info.ini"
+MAX_PROCESS = 12
 
 
 def check_executable() -> bool:
@@ -76,26 +79,30 @@ def call_ydl_extract_info(url: str) -> list[dict]:
         return []
 
 
-async def call_ydl_download_m4a(id: str) -> bool:
+def call_ydl_download_m4a(entry: dict) -> bool:
     """
     Use youtube-dl to download m4a
     """
+    videoId = entry["id"]
+    output_dir = entry["download_dir"]
+
     opts = {
         # "simulate": True,
         "ignoreerrors": True,
         "quiet": True,
-        "outtmpl": "%(title)s.%(ext)s",
+        "outtmpl": f"{output_dir}/%(title)s.%(ext)s",
         "format": "bestaudio[ext=m4a]",
-        "download_archive": "downloaded.txt",
+        "download_archive": f"{output_dir}/downloaded.txt",
         "writethumbnail": True,
         "postprocessors": [
             {"key": "FFmpegMetadata"},  # postprocessors must be written in this order #30101
             {"key": "EmbedThumbnail"},
         ],
     }
+
     with YoutubeDL(opts) as ydl:
-        print(f"DL start! {id}")
-        ydl.download([id])
+        ydl.download([videoId])
+
     return
 
 
@@ -117,18 +124,6 @@ class EntriesSingleton:
             cls._instance = super().__new__(cls)
 
         return cls._instance
-
-    async def start_download(self, entry):
-        os.chdir(entry["download_dir"])
-        await call_ydl_download_m4a(entry["id"])
-
-    tasks = []
-
-    async def async_wrapper_start_download(self):
-        for entry in self.entries_list:
-            task = asyncio.create_task(self.start_download(entry))
-            self.tasks.append(task)
-        await asyncio.gather(*self.tasks)
 
 
 class DirExecutor:
@@ -189,6 +184,14 @@ class DirExecutor:
         return dir_entries
 
 
+def tqdm_wrapper_for_ThreadPoolExecutor(func, iterable):
+    """
+    ThreadPoolExecutor() の進捗を可視化するためのtqdmのラッパー
+    """
+    with ThreadPoolExecutor(max_workers=MAX_PROCESS) as executor:
+        list(tqdm.tqdm(executor.map(func, iterable), total=len(iterable)))
+
+
 async def main():
     print("start!")
 
@@ -212,8 +215,11 @@ async def main():
         # コルーチンを並行実行
         await asyncio.gather(*tasks)
 
+        # シングルトンインスタンス化
         entries_singleton = EntriesSingleton()
-        await entries_singleton.async_wrapper_start_download()
+
+        # dlの並行実行
+        tqdm_wrapper_for_ThreadPoolExecutor(call_ydl_download_m4a, entries_singleton.entries_list)
 
     except Exception as e:
         print(e)
