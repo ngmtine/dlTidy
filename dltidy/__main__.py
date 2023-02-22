@@ -2,14 +2,14 @@ import shutil
 import os
 import asyncio
 import sys
-import configparser
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 import tqdm
 
 from yt_dlp import YoutubeDL
 
-SETTING_FILE = "settings.ini"
-INFOMATION_FILE = "info.ini"
+SETTING_FILE = "settings.toml"
+INFOMATION_FILE = "info.toml"
 MAX_PROCESS = 12
 
 
@@ -30,12 +30,8 @@ def read_settings(setting_file: str = SETTING_FILE) -> bool:
     設定ファイル（settings.ini）の読み込み
     """
 
-    # 設定ファイルの読み込み
-    settings = {}
-    ini = configparser.ConfigParser()
-    ini.read(setting_file, encoding="utf-8_sig")
-    settings["output_dir"] = ini["env"]["output_dir"]
-    settings["max_concurrency"] = ini["env"]["max_concurrency"]
+    with open(SETTING_FILE, "rb") as f:
+        settings = tomllib.load(f)["env"]
 
     return settings
 
@@ -149,13 +145,8 @@ class DirExecutor:
         if not os.path.isfile(INFOMATION_FILE):
             raise FileNotFoundError()
 
-        # ディレクトリ内のinfo.iniの読み込み
-        config = {}
-        ini = configparser.ConfigParser()
-        ini.read(INFOMATION_FILE, encoding="utf-8_sig")
-        config["artist"] = ini["env"]["artist"]
-        config["album"] = ini["env"]["album"]
-        config["url_list"] = ini["env"]["url_list"].replace("\n", "").replace(" ", "").replace("　", "").split(",")
+        with open(INFOMATION_FILE, "rb") as f:
+            config = tomllib.load(f)["env"]
 
         # 値が存在しない場合
         if len(config["url_list"]) == 0:
@@ -203,6 +194,7 @@ async def main():
         settings = read_settings()
 
         # output_dir以下のディレクトリを列挙
+        # dir_list = get_all_dirs(settings["output_dir"])
         dir_list = get_all_dirs(settings["output_dir"])
 
         # コルーチンのリスト作成
