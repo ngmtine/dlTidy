@@ -27,7 +27,7 @@ def check_executable() -> bool:
 
 def read_settings(setting_file: str = SETTING_FILE) -> bool:
     """
-    設定ファイル（settings.ini）の読み込み
+    設定ファイル（settings.toml）の読み込み
     """
 
     with open(SETTING_FILE, "rb") as f:
@@ -136,7 +136,7 @@ class DirExecutor:
 
     async def read_dir_config(self) -> dict:  # dict{"artist": str, "album": str, "ulr_list": list[str]}
         """
-        self.pathに移動し、設定ファイル（info.ini）を読み取り、辞書型configを返す
+        self.pathに移動し、設定ファイル（info.toml）を読み取り、辞書型configを返す
         """
         # cd
         os.chdir(self.path)
