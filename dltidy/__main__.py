@@ -194,7 +194,6 @@ async def main():
         settings = read_settings()
 
         # output_dir以下のディレクトリを列挙
-        # dir_list = get_all_dirs(settings["output_dir"])
         dir_list = get_all_dirs(settings["output_dir"])
 
         # コルーチンのリスト作成
