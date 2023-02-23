@@ -31,7 +31,7 @@ def read_settings(setting_file: str = SETTING_FILE) -> bool:
     """
 
     with open(SETTING_FILE, "rb") as f:
-        settings = tomllib.load(f)["env"]
+        settings = tomllib.load(f)
 
     return settings
 
@@ -146,7 +146,7 @@ class DirExecutor:
             raise FileNotFoundError()
 
         with open(INFOMATION_FILE, "rb") as f:
-            config = tomllib.load(f)["env"]
+            config = tomllib.load(f)
 
         # 値が存在しない場合
         if len(config["url_list"]) == 0:

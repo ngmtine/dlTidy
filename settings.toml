@@ -1,4 +1,3 @@
-[env]
 # ダウンロード先として指定するディレクトリ
 output_dir = "~/dltidytest"
 
