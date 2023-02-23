@@ -1,16 +1,16 @@
 import shutil
 import os
 import asyncio
-import sys
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
 import tqdm
-
+from mutagen.mp4 import MP4
 from yt_dlp import YoutubeDL
 
 SETTING_FILE = "settings.toml"
 INFOMATION_FILE = "info.toml"
 MAX_PROCESS = 12
+TRACKNUMBER_ORDER_DESCENDING = True
 
 
 def check_executable() -> bool:
@@ -22,7 +22,7 @@ def check_executable() -> bool:
     for i in executable_list:
         if not shutil.which(i):
             raise Exception(f"Error: Failed to execute '{i}'")
-    return
+    return True
 
 
 def read_settings(setting_file: str = SETTING_FILE) -> bool:
@@ -127,9 +127,19 @@ class DirExecutor:
         self.path = path
 
     async def async_init(self):
+        """
+        __init__()をasyncで回すためのラッパーメソッド
+        """
         try:
             self.dir_config = await self.read_dir_config()
+            self.url_list = self.dir_config["url_list"]
+            self.artist = self.dir_config["artist"]
+            self.album = self.dir_config["album"]
+
+            # dlする動画urlのリストを取得
             self.entries_list = await self.fetch_entries()
+
+            # fetch_entries()で取得したurlリストを、全ディレクトリについて集約するシングルトンクラスに登録
             EntriesSingleton(self.entries_list)
         except Exception as e:
             pass
@@ -145,23 +155,34 @@ class DirExecutor:
         if not os.path.isfile(INFOMATION_FILE):
             raise FileNotFoundError()
 
-        with open(INFOMATION_FILE, "rb") as f:
-            config = tomllib.load(f)
+        try:
+            with open(INFOMATION_FILE, "rb") as f:
+                config = tomllib.load(f)
+                # info.toml内の記述が1行でも不正だとここでコケるのに注意
 
-        # 値が存在しない場合
-        if len(config["url_list"]) == 0:
-            # raise Exception("urlの指定がありません")
-            config["url"] = "unknown"
-        if len(config["artist"]) == 0:
+            # 値が存在しない場合
+            if len(config["url_list"]) == 0:
+                # raise Exception("urlの指定がありません")
+                config["url_list"] = []
+            if len(config["artist"]) == 0:
+                config["artist"] = "unknown"
+            if len(config["album"]) == 0:
+                config["album"] = "unknown"
+
+        # except tomllib.TomlDecodeError as e:
+        except Exception as e:
+            print(e)
+            print(f"└→  {self.path} の {INFOMATION_FILE} が不正です")
+            config = {}
+            config["url_list"] = []
             config["artist"] = "unknown"
-        if len(config["album"]) == 0:
             config["album"] = "unknown"
 
         return config
 
     async def fetch_entries(self) -> list:  # list[dict{"download_dir": str, "url": str, "title": str, ...}]
         """
-        与えられたurl（youtubeのプレイリストurl等を想定）をyt-dlpに投げ、動画データのリストを取得する
+        与えられたurl（youtubeのプレイリストurl等を想定）をyt-dlpに投げ、取得した動画データ（辞書型）をリストにして返す
         動画データにはyt-dlpで得られた情報に加え、download_dirも追加する
         """
         dir_entries = []
@@ -174,6 +195,35 @@ class DirExecutor:
 
         return dir_entries
 
+    async def tagging_m4a(self):
+        """
+        Use mutagen for tagging
+        """
+
+        os.chdir(self.path)
+        m4a_list = []
+        for filename in os.listdir(os.getcwd()):
+            if filename.endswith(".m4a"):
+                v = MP4(filename)
+                upload_date = v["\xa9day"] if "\xa9day" in v else 0
+                m4a_list.append({"filename": filename, "upload_date": upload_date})
+
+        if len(m4a_list) == 0:
+            return
+
+        m4a_list_sorted = sorted(m4a_list, key=lambda x: x["upload_date"], reverse=TRACKNUMBER_ORDER_DESCENDING)
+
+        for idx, video in enumerate(m4a_list_sorted):
+            audio = MP4(video["filename"])
+            audio["\xa9nam"] = ""  # title
+            audio["\xa9ART"] = self.artist  # artist
+            audio["\xa9alb"] = self.album  # album
+            # audio["\xa9gen"] = GENRE  # genre
+            audio["trkn"] = [(idx + 1, 0)]  # tracknumber
+            audio.save()
+
+        return
+
 
 def tqdm_wrapper_for_ThreadPoolExecutor(func, iterable):
     """
@@ -184,8 +234,6 @@ def tqdm_wrapper_for_ThreadPoolExecutor(func, iterable):
 
 
 async def main():
-    print("start!")
-
     try:
         # このスクリプトが依存するプログラムの存在チェック
         check_executable()
@@ -196,25 +244,38 @@ async def main():
         # output_dir以下のディレクトリを列挙
         dir_list = get_all_dirs(settings["output_dir"])
 
-        # コルーチンのリスト作成
-        tasks = []
+        # dir_executorのリスト作成
+        dir_executor_list = []
         for _dir in dir_list:
-            dir_executor = DirExecutor(_dir)
+            dir_executor_list.append(DirExecutor(_dir))
+
+        # コルーチンのリスト作成
+        task_list = []
+        for dir_executor in dir_executor_list:
             task = asyncio.create_task(dir_executor.async_init())
-            tasks.append(task)
+            task_list.append(task)
 
-        # コルーチンを並行実行
-        await asyncio.gather(*tasks)
-
-        # シングルトンインスタンス化
-        entries_singleton = EntriesSingleton()
+        # コルーチンを並行実行（ここでasync defしたコンストラクタを回す）
+        await asyncio.gather(*task_list)
 
         # dlの並行実行
+        entries_singleton = EntriesSingleton()
         tqdm_wrapper_for_ThreadPoolExecutor(call_ydl_download_m4a, entries_singleton.entries_list)
+        print("download task finished!")
+
+        del task, task_list
+        # コルーチンのリスト作成
+        task_list = []
+        for dir_executor in dir_executor_list:
+            task = asyncio.create_task(dir_executor.tagging_m4a())
+            task_list.append(task)
+
+        # コルーチンを並行実行（タグ付け）
+        await asyncio.gather(*task_list)
+        print("tagging task finished!")
 
     except Exception as e:
         print(e)
-        pass
 
 
 if __name__ == "__main__":
@@ -222,6 +283,7 @@ if __name__ == "__main__":
 
     start_time = time.perf_counter()
 
+    print("start!")
     asyncio.run(main())
     print("end!")
 
