@@ -10,8 +10,6 @@ from yt_dlp import YoutubeDL
 
 SETTING_FILE = "settings.toml"
 INFOMATION_FILE = "videoinfo.toml"
-MAX_PROCESS = 12
-TRACKNUMBER_ORDER_DESCENDING = True
 
 
 def check_executable() -> bool:
@@ -47,7 +45,7 @@ def get_all_dirs(path: str) -> list[str]:
 
     # path（output_dir）が存在しない場合
     if not os.path.isdir(path):
-        raise FileNotFoundError(f"'{path}'が見つかりません")
+        raise FileNotFoundError(f"'{path}'が見つかりません\nディレクトリを作成し、videoinfo.tomlを用意してください")
 
     # 列挙
     dir_list = [path]
@@ -241,6 +239,10 @@ async def main():
 
         # グローバルな設定の読み込み
         settings = read_settings()
+
+        global MAX_PROCESS, TRACKNUMBER_ORDER_DESCENDING
+        MAX_PROCESS = settings["max_process"]
+        TRACKNUMBER_ORDER_DESCENDING = settings["tracknumber_order_descending"]
 
         # output_dir以下のディレクトリを列挙
         dir_list = get_all_dirs(settings["output_dir"])

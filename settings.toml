@@ -3,3 +3,8 @@ output_dir = "~/dltidy"
 
 # # 最大並行処理数
 # max_concurrency = 0
+
+max_process = 12
+
+# Trueでトラック番号降順, Falseで昇順
+tracknumber_order_descending = "True"
