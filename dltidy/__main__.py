@@ -9,7 +9,7 @@ from mutagen.mp4 import MP4
 from yt_dlp import YoutubeDL
 
 SETTING_FILE = "settings.toml"
-INFOMATION_FILE = "info.toml"
+INFOMATION_FILE = "videoinfo.toml"
 MAX_PROCESS = 12
 TRACKNUMBER_ORDER_DESCENDING = True
 
@@ -147,7 +147,7 @@ class DirExecutor:
 
     async def read_dir_config(self) -> dict:  # dict{"artist": str, "album": str, "ulr_list": list[str]}
         """
-        self.pathに移動し、設定ファイル（info.toml）を読み取り、辞書型configを返す
+        self.pathに移動し、設定ファイル（videoinfo.toml）を読み取り、辞書型configを返す
         """
         # cd
         os.chdir(self.path)
@@ -159,7 +159,7 @@ class DirExecutor:
         try:
             with open(INFOMATION_FILE, "rb") as f:
                 config = tomllib.load(f)
-                # info.toml内の記述が1行でも不正だとここでコケるのに注意
+                # videoinfo.toml内の記述が1行でも不正だとここでコケるのに注意
 
             # 値が存在しない場合
             if len(config["url_list"]) == 0:
