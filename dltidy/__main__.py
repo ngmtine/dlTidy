@@ -1,8 +1,9 @@
-import shutil
-import os
 import asyncio
-import tomllib
+import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor
+
+import tomllib
 import tqdm
 from mutagen.mp4 import MP4
 from yt_dlp import YoutubeDL
