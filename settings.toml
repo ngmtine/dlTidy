@@ -1,5 +1,5 @@
 # ダウンロード先として指定するディレクトリ
-output_dir = "~/dltidy"
+output_dir = "~/dltidy_output"
 
 # # 最大並行処理数
 # max_concurrency = 0
