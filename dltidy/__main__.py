@@ -242,7 +242,7 @@ async def main():
 
         global MAX_PROCESS, TRACKNUMBER_ORDER_DESCENDING
         MAX_PROCESS = settings["max_process"]
-        TRACKNUMBER_ORDER_DESCENDING = settings["tracknumber_order_descending"]
+        TRACKNUMBER_ORDER_DESCENDING = eval(settings["tracknumber_order_descending"])
 
         # output_dir以下のディレクトリを列挙
         dir_list = get_all_dirs(settings["output_dir"])
